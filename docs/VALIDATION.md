@@ -31,8 +31,8 @@ deployment claim. Legitimate diverse telemetry IDs intentionally trigger the
 heuristic in a regression test. Slow/distributed traffic intentionally stays below
 the default thresholds in other tests.
 
-Cross-platform CI is configured for Windows, Linux and macOS on Python 3.11 and
-3.13, but has not run on GitHub because this project has not been published.
+Cross-platform CI passed all six jobs on Windows, Linux and macOS with Python
+3.11 and 3.13 for the initial published commit. [Workflow run](https://github.com/yotam1001/dns-investigation-workbench/actions/runs/37202397915).
 The optional tshark oracle can be skipped on machines without tshark; its skip
 is visible in test output. Parser smoke fuzzing uses 500 seeded random inputs,
 not exhaustive fuzzing or a claim of memory/resource safety under every input.

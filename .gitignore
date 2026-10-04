@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+demo-output/
+captures/
+reports/
+*.pcap
+*.pcapng
+!tests/fixtures/*.pcap
+!tests/fixtures/*.pcapng
+.env
+.env.*

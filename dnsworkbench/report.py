@@ -1,0 +1,50 @@
+"""Self-contained report; untrusted capture strings are HTML-escaped."""
+
+from html import escape
+
+
+CSS = """
+:root{color-scheme:dark;--bg:#10171d;--panel:#18232b;--line:#30414c;--text:#e4ecee;--muted:#a4b4bd;--accent:#94dfc0;--amber:#f2bd72}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,sans-serif}
+main{max-width:1120px;margin:auto;padding:48px 28px 80px}a{color:var(--accent)}.eyebrow{font:12px/1.5 ui-monospace,monospace;letter-spacing:.16em;color:var(--accent)}
+h1{font-size:clamp(32px,5vw,58px);line-height:1.1;letter-spacing:-.04em;margin:12px 0 20px}h2{font-size:24px;font-weight:600;margin:36px 0 16px}h3{margin:0;font-size:21px}
+p{max-width:80ch}.muted,small{color:var(--muted)}.banner{border-left:3px solid var(--amber);padding:12px 20px;background:#29251f;border-radius:4px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:28px 0}.stat{padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.stat strong{display:block;font:32px/1.3 ui-monospace,monospace}.stat span{font-size:13px;color:var(--muted)}
+.card{border:1px solid var(--line);border-radius:12px;padding:24px;margin:16px 0;background:var(--panel)}.card.review{border-color:#987747}.card .head{display:flex;justify-content:space-between;gap:12px;align-items:start}.pill{font:12px/1.4 ui-monospace,monospace;border:1px solid var(--line);padding:5px 10px;border-radius:100px;white-space:nowrap}.review .pill{color:var(--amber);border-color:#987747}.metrics{display:flex;gap:28px;flex-wrap:wrap;margin:20px 0}.metrics strong{display:block;font:22px ui-monospace,monospace}.metrics small{font-size:12px}.bar{height:6px;width:100%;background:#30414c;border-radius:4px;margin:10px 0}.bar span{height:100%;display:block;background:var(--accent);border-radius:4px}.review .bar span{background:var(--amber)}
+details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}summary{cursor:pointer;color:var(--accent)}summary:focus-visible,a:focus-visible{outline:2px solid var(--amber);outline-offset:4px}code{font:13px ui-monospace,monospace;overflow-wrap:anywhere}.samples{padding-left:20px}.samples li{margin:9px 0}.overflow{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}footer{margin-top:36px;border-top:1px solid var(--line);padding-top:20px;font-size:13px;overflow-wrap:anywhere}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.toolbar button{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:8px 14px;border-radius:6px;cursor:pointer}.toolbar button[aria-pressed=true]{background:var(--accent);color:#14231d}.toolbar button:focus-visible{outline:2px solid var(--amber)}[hidden]{display:none!important}
+@media(max-width:650px){main{padding:28px 16px}.stats{grid-template-columns:repeat(2,1fr)}.card{padding:18px}.card .head{flex-direction:column}.metrics{gap:16px}}@media print{:root{color-scheme:light;--bg:white;--panel:white;--text:#111;--muted:#444;--line:#bbb;--accent:#176344;--amber:#85510b}body{background:white}.toolbar{display:none}.card{break-inside:avoid}.banner{background:#fff6e7}}
+"""
+
+
+def render(report, demo=False):
+    esc = lambda value: escape(str(value), quote=True)
+    coverage = report["coverage"]
+    groups = report["groups"]
+    review_groups = [row for row in groups if row["status"] == "review"]
+    cards = []
+    for row in review_groups[:200]:
+        evidence = row["evidence"]
+        samples = "".join(f'<li><code>Packet {packet}: {esc(name)}</code></li>'
+                          for packet, name in zip(evidence["packet_numbers"], evidence["names"]))
+        percent = min(100, round(evidence["suspicious_fraction"] * 100))
+        cards.append(f'''<section class="card review"><div class="head"><div><h3>{esc(row['domain'])}</h3><code>Client {esc(row['client'])}</code></div><span class="pill">REVIEW SUGGESTED</span></div>
+<p>{esc(row['explanation'])}</p><div class="metrics"><div><strong>{evidence['unique_encoded_names']}</strong><small>distinct encoded-looking names in window</small></div><div><strong>{row['max_entropy_bits_per_character']}</strong><small>peak eligible-label entropy (bits/char)</small></div><div><strong>{row['max_label_length']}</strong><small>longest subdomain label</small></div></div>
+<div class="bar" role="img" aria-label="{percent}% of queries in the selected window meet label criteria"><span style="width:{percent}%"></span></div><small>{percent}% of {evidence['window_queries']} window queries meet the label criteria. Capture time {evidence['start']:.6f}–{evidence['end']:.6f} seconds.</small>
+<p class="muted">Alternative explanation: {esc(row['alternative_explanation'])} Review the packet evidence and context before drawing a conclusion.</p>
+<details><summary>Inspect packet evidence</summary><ul class="samples">{samples}</ul><p class="muted">Up to eight sample questions from the strongest observed window. RCODE counts: <code>{esc(row['response_codes'])}</code>. {row['matched_responses']} / {row['queries']} questions have a matched response within 30 seconds; missing responses may be a capture gap.</p></details></section>''')
+    table_rows = []
+    for row in groups[:500]:
+        table_rows.append(f'''<tr data-status="{row['status']}"><td><code>{esc(row['client'])}</code></td><td><code>{esc(row['domain'])}</code></td><td>{row['queries']}</td><td>{row['unique_names']}</td><td>{row['max_label_length']}</td><td>{row['max_entropy_bits_per_character']}</td><td>{'Review' if row['status']=='review' else 'No pattern flagged'}</td></tr>''')
+    gap_rows = "".join(f'<li>{esc(reason)} — {count}</li>' for reason, count in coverage["gaps"].items())
+    thresholds = "".join(f'<li><code>{esc(name)}</code>: {esc(value)}</li>' for name, value in report["config"].items())
+    label = "SYNTHETIC DEMO / NO REAL NETWORK TRAFFIC" if demo else "OFFLINE CAPTURE INVESTIGATION"
+    summary = "".join(cards) or '<p class="muted">No groups met the combined thresholds. This is not a clean bill of health.</p>'
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>DNS Workbench — investigation report</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2310171d'/%3E%3Cpath d='M14 32h36M32 14v36M14 14h36v36H14z' stroke='%2394dfc0' fill='none' stroke-width='4'/%3E%3C/svg%3E"><style>{CSS}</style></head><body><main>
+<div class="eyebrow">DNS WORKBENCH / {label}</div><h1>Follow the query trail.</h1><p class="muted">An evidence report for <code>{esc(report['input'])}</code>. Long, varied DNS labels can carry data—or ordinary application tokens. This workbench shows the observations behind each review signal.</p>
+<div class="banner"><strong>{esc(report['verdict'])}</strong><br>Coverage: {esc(coverage['status'])}. {esc(report['warning'])}</div>
+<div class="stats"><div class="stat"><strong>{coverage['packets_processed']:,}</strong><span>packets inspected</span></div><div class="stat"><strong>{coverage['questions_analyzed']:,}</strong><span>query questions parsed</span></div><div class="stat"><strong>{report['finding_count']:,}</strong><span>client/domain groups to review</span></div><div class="stat"><strong>{sum(coverage['gaps'].values()):,}</strong><span>coverage-gap occurrences</span></div></div>
+<h2>Why these groups stand out</h2>{summary}<p class="muted">Showing {min(200,len(review_groups))} of {len(review_groups)} flagged groups. Full results are available in the JSON export.</p>
+<h2>All observed groups</h2><div class="toolbar" aria-label="Filter observed groups"><button aria-pressed="true" data-filter="all">All groups</button><button aria-pressed="false" data-filter="review">Review signals</button><button aria-pressed="false" data-filter="no-pattern-flagged">No pattern flagged</button></div><div class="overflow"><table><thead><tr><th>Client</th><th>Domain</th><th>Queries</th><th>Distinct names</th><th>Max label</th><th>Entropy</th><th>Result</th></tr></thead><tbody>{''.join(table_rows)}</tbody></table></div><p class="muted">Showing the first {min(500,len(groups))} of {len(groups)} groups. {coverage['allowlisted_questions']} questions excluded by the configured allowlist. A no-pattern result is specific to these thresholds and this capture.</p>
+<h2>Coverage &amp; reproducibility</h2><div class="card"><p>{esc(coverage['scope'])}</p><ul>{gap_rows or '<li>No framing or supported-parser gaps observed.</li>'}</ul><p>Allowlist (exact domains and their subdomains): <code>{esc(report['allowlist'])}</code></p><details><summary>Thresholds and processing limits</summary><ul>{thresholds}</ul><p>Entropy is Shannon entropy of label characters, not cryptographic randomness. At least one subdomain label must meet both the length and entropy thresholds; distinct suspicious names and their fraction are then measured in a sliding window separately for each client and registrable domain. This is a configurable heuristic, not a validated classifier.</p></details></div>
+<footer>Input SHA-256: <code>{esc(report['input_sha256'])}</code><br>Public Suffix List: {esc(report['public_suffix_list']['version'])}; SHA-256 <code>{esc(report['public_suffix_list']['sha256'])}</code><br>Reports contain observed client addresses and DNS names. Keep real reports private. No external scripts, fonts, analytics or network requests are used by this report.</footer></main><script>
+document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{{document.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));document.querySelectorAll('tr[data-status]').forEach(row=>row.hidden=button.dataset.filter!=='all'&&row.dataset.status!==button.dataset.filter);}}));
+</script></body></html>'''

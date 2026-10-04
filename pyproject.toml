@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dns-investigation-workbench"
+version = "0.1.0"
+description = "Offline DNS capture investigation with explainable review signals and visible coverage gaps"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+dns-workbench = "dnsworkbench.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["dnsworkbench*"]
+
+[tool.setuptools.package-data]
+dnsworkbench = ["data/*.dat", "data/MPL-2.0.txt"]
